@@ -1,0 +1,131 @@
+name: PolinRider Scanner
+description: Scan a repository for the PolinRider payload with the same engine and indicators as the polinrider tool, pinned by hash.
+author: Mandeep Singh
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  mode:
+    description: >-
+      check (default) reads only. fix also runs polinrider clean --apply on the
+      checkout and opens a pull request with the cleaned files. fix never
+      commits to the branch it scanned, never force-pushes and never merges.
+    required: false
+    default: check
+  path:
+    description: The directory to scan, relative to the workspace.
+    required: false
+    default: .
+  fail-on:
+    description: >-
+      confirmed (default) fails the step on a confirmed finding. review also
+      fails on a finding to review. never only reports. A scan that could not
+      run always fails.
+    required: false
+    default: confirmed
+  comment:
+    description: >-
+      true posts the result as a comment on the pull request that triggered the
+      run, and keeps it up to date. Needs pull-requests: write.
+    required: false
+    default: "false"
+  sarif-file:
+    description: >-
+      Write the findings as SARIF to this path, for
+      github/codeql-action/upload-sarif. Empty writes none.
+    required: false
+    default: ""
+  token:
+    description: >-
+      Used only by fix mode and comment: true, never by the scan. The default
+      token opens pull requests whose checks wait for approval; a GitHub App
+      token or a fine-grained token runs them straight away.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  verdict:
+    description: clean, review, infected or error.
+    value: ${{ steps.report.outputs.verdict }}
+  confirmed:
+    description: The number of confirmed findings.
+    value: ${{ steps.report.outputs.confirmed }}
+  review:
+    description: The number of findings to review.
+    value: ${{ steps.report.outputs.review }}
+  files:
+    description: The number of files scanned.
+    value: ${{ steps.report.outputs.files }}
+  pr-url:
+    description: The pull request fix mode opened, or found already open. Empty otherwise.
+    value: ${{ steps.publish.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download polinrider and check its hash
+      id: install
+      shell: bash
+      env:
+        # The release this action runs and the SHA-256 of each archive, from
+        # that release's SHA256SUMS. Written by packaging/action.sh in
+        # meSingh/polinrider-scanner after each release. Not edited by hand.
+        POLINRIDER_VERSION: "3.1.0"
+        POLINRIDER_INDICATORS_REVIEWED: "2026-11-09"
+        POLINRIDER_SHA256_LINUX_X86_64: "e87f05fa75ef03c919766d8316639f8118f3ce3cf227e4451c17061172680420"
+        POLINRIDER_SHA256_LINUX_ARM64: "ba00f0395fb6274b9087b5736b9dd2c1f88cbdf38ec35b32f021ba05f4a15be8"
+        POLINRIDER_SHA256_MACOS_ARM64: "6e50c8d620125e5f6248e95ae950049883c4f25153249ebf773f270e8b69a726"
+        POLINRIDER_SHA256_MACOS_X86_64: "ffc66b5b58320f91478edabb2b18117787f188dc3142a10095e5309dafb10fee"
+        POLINRIDER_RELEASES: https://github.com/meSingh/polinrider-scanner/releases/download
+      run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
+
+    - name: Scan
+      id: scan
+      if: steps.install.outcome == 'success'
+      shell: bash
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/scan.sh"
+
+    - name: Open the pull request that removes the payload
+      id: publish
+      if: steps.scan.outputs.fix-ready == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/publish.sh"
+
+    - name: Report
+      id: report
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/report.sh"
+
+    - name: Comment on the pull request
+      if: ${{ !cancelled() && steps.report.outputs.comment-ready == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/comment.sh"
+
+    - name: Result
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        VERDICT: ${{ steps.report.outputs.verdict }}
+        PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/result.sh"

@@ -1,0 +1,67 @@
+# The fixture tests, on a real runner, and the action run on its own
+# repository the way a user's workflow runs it.
+
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    name: Fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # gh release download goes through the API, which the scanner's
+      # download history does not count.
+      - name: The pinned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(awk '$1 == "POLINRIDER_VERSION:" { gsub(/"/, "", $2); print $2 }' action.yml)
+          gh release download "v${version}" --repo meSingh/polinrider-scanner \
+            --pattern "polinrider-v${version}-linux-*.tar.gz" --dir "dist/v${version}"
+
+      - name: Lint
+        run: |
+          cd scripts
+          shellcheck -x --severity=warning ./*.sh ../test/*.sh
+
+      - name: Run the fixtures
+        env:
+          ACTION: ${{ github.workspace }}
+          DIST: ${{ github.workspace }}/dist
+        run: bash test/run.sh
+
+  self:
+    name: The action on this repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan
+        id: scan
+        uses: ./
+        with:
+          sarif-file: polinrider.sarif
+
+      - name: The outputs
+        env:
+          VERDICT: ${{ steps.scan.outputs.verdict }}
+          FILES: ${{ steps.scan.outputs.files }}
+        run: |
+          echo "verdict ${VERDICT}, ${FILES} files"
+          [[ "$VERDICT" == clean && "$FILES" -gt 0 ]]
+          jq -e '.runs[0].tool.driver.name == "PolinRider Scanner"' polinrider.sarif

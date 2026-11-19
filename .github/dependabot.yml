@@ -1,0 +1,12 @@
+# The test workflow pins actions/checkout to a commit SHA. This moves the pin
+# when a new release exists, seven days after it, as in polinrider-scanner.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
