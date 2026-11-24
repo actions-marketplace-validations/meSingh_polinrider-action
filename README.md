@@ -37,23 +37,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: meSingh/polinrider-action@8c71848593f0e58416c5f61845b3bd2e8080d438 # v1.0.0
+      - uses: meSingh/polinrider-action@cd105ea591bb6d431aae82c316e2c44409e35d48 # v1.1.0
 ```
 
 Use the full commit SHA of the release you want, not a tag: the one above is
-v1.0.0. The [releases page](https://github.com/meSingh/polinrider-action/releases)
+v1.1.0. The [releases page](https://github.com/meSingh/polinrider-action/releases)
 lists each one's SHA. Tags of this action never move, but a SHA is what GitHub
 itself guarantees cannot.
 
 A confirmed finding fails the check. The job summary lists each finding and
 what to do next, and each one is annotated on its file.
 
+It checks the commit it runs on. It does not read the repository's other
+branches or older commits: the scanner on a computer does that, where someone
+can act on what it finds.
+
 ## So it doesn't come back
 
 1. **Make the check required.** In your repository's Settings, Rules,
    Rulesets, add a branch ruleset for the default branch with "Require status
    checks to pass" and pick `scan`. An infected push or pull request then
-   cannot merge.
+   cannot merge. The full ruleset, and the command to create it, are in
+   [Block a merge on a finding](https://polinriderscanner.com/docs/action/require/).
 2. **Keep the weekly schedule.** The `schedule:` above runs the scan on
    Mondays even when nobody pushes, so indicators added in a new release reach
    code that has not changed.
@@ -128,7 +133,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: meSingh/polinrider-action@8c71848593f0e58416c5f61845b3bd2e8080d438 # v1.0.0
+      - uses: meSingh/polinrider-action@cd105ea591bb6d431aae82c316e2c44409e35d48 # v1.1.0
         with:
           mode: fix
 ```
@@ -180,7 +185,7 @@ Things to know:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: meSingh/polinrider-action@8c71848593f0e58416c5f61845b3bd2e8080d438 # v1.0.0
+      - uses: meSingh/polinrider-action@cd105ea591bb6d431aae82c316e2c44409e35d48 # v1.1.0
         with:
           comment: true
           sarif-file: polinrider.sarif
